@@ -6,6 +6,8 @@ from shove import Shove
 from struct import pack
 from werkzeug.exceptions import NotFound
 import config
+import StringIO
+from gzip import GzipFile
 
 #TODO cache doesn't have locking....
 cache = Shove('bsddb://cache.db', 'memcache://localhost')
@@ -19,7 +21,6 @@ def positions(chrom):
         line = islice(line, len_chrom, 20)
         yield int(''.join(takewhile(not_tab, line)))
 
-
 def pack_bytes(fmt, seq):
     for num in seq:
         for char in pack(fmt, num):
@@ -28,6 +29,13 @@ def pack_bytes(fmt, seq):
 def response(query_data):
     return query_data
 
+def gzip(data):
+    out = StringIO.StringIO()
+    f = GzipFile(fileobj=out, mode='w')
+    f.write(data)
+    f.close()
+    return out.getvalue()
+
 def handler(start_response, query_data):
     chrom = query_data['chrom']
     if chrom not in tabix.contigs:
@@ -35,12 +43,14 @@ def handler(start_response, query_data):
     try:
         data = cache[config.vcf_file+chrom+'_pos']
     except KeyError:
-        data = bytes(bytearray(pack_bytes('<I', positions(chrom))))
+        data = gzip(bytes(bytearray(pack_bytes('<I', positions(chrom)))))
         cache[config.vcf_file+chrom+'_pos'] = data
         cache.sync()
+
     status = '200 OK'
     response_headers = [('Content-type', 'text/plain'),
-                        ('Content-Length', str(len(data)))]
+                        ('Content-Length', str(len(data))),
+                        ('Content-Encoding', 'gzip')]
     start_response(status, response_headers)
     yield data
 

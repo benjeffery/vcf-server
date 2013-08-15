@@ -43,7 +43,8 @@ def good_snp(snp):
 def snps_json():
     VCF_READER = vcf.Reader(filename=sys.argv[1])#, wanted_samples=SAMPLES)
     for snp in VCF_READER.fetch('MAL1', pos[0], pos[-1]):#pos[-1]) ]#if snp.INFO.get("HQS", False)]
-        print snp
+        for sample in snp.samples:
+             a = sample.data.AD
     #snps = filter(good_snp, snps)
     #result = {
     #     'start':start,
