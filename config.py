@@ -1,1 +1,1 @@
-vcf_file = '/home/benj/data/2.0vcf/data.vcf.gz'
+vcf_file = '/home/benj/data/2.0vcf/data_nogene.vcf.gz'

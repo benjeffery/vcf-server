@@ -39,10 +39,11 @@ def gzip(data):
 def handler(start_response, query_data):
     chrom = query_data['chrom']
     if chrom not in tabix.contigs:
-        raise NotFound('Chromosome name not found')
+        raise NotFound(chrom+' Chromosome name not found')
     try:
         data = cache[config.vcf_file+chrom+'_pos']
     except KeyError:
+        #As the response is not sample dependant we can zip it up in the cache.
         data = gzip(bytes(bytearray(pack_bytes('<I', positions(chrom)))))
         cache[config.vcf_file+chrom+'_pos'] = data
         cache.sync()
