@@ -46,7 +46,6 @@ def handler(start_response, query_data):
         #As the response is not sample dependant we can zip it up in the cache.
         data = gzip(bytes(bytearray(pack_bytes('<I', positions(chrom)))))
         cache[config.vcf_file+chrom+'_pos'] = data
-        cache.sync()
 
     status = '200 OK'
     response_headers = [('Content-type', 'text/plain'),
