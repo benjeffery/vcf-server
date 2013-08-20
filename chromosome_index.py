@@ -2,7 +2,7 @@ import pysam
 from itertools import islice, takewhile
 from operator import ne
 from functools import partial
-from shove import Shove
+import bsddb
 from struct import pack
 from werkzeug.exceptions import NotFound
 import config
@@ -10,7 +10,7 @@ import StringIO
 from gzip import GzipFile
 
 #TODO cache doesn't have locking....
-cache = Shove('bsddb://cache.db', 'memcache://localhost')
+cache = bsddb.hashopen('cacheindex.db')
 tabix = pysam.Tabixfile(config.vcf_file)
 
 def positions(chrom):
