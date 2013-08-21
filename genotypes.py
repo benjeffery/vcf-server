@@ -17,19 +17,19 @@ def pack_bytes(fmt, seq):
         for char in pack(fmt, num):
             yield char
 
-def generate_and_store(chrom, start, end, samples):
-    all_sample_data = {}
-    custom_vcf_reader = vcf.Reader(filename=config.vcf_file, wanted_samples=samples)
-    for sample in samples:
-        all_sample_data[sample] = [bytearray(), bytearray(), bytearray()]
-
+def generate_and_store(chrom, start, end, sample_data):
+    needed_samples = [sample for sample in sample_data if sample_data[sample] is None]
+    custom_vcf_reader = vcf.Reader(filename=config.vcf_file, wanted_samples=needed_samples)
+    for sample in needed_samples:
+        sample_data[sample] = [bytearray(), bytearray(), bytearray()]
     for i, snp in enumerate(custom_vcf_reader.fetch(chrom, start, end-1)):
         if (i % 100) == 0:
             print 'custom',i
-        for sample_name in samples:
+        for sample_name in needed_samples:
             sample = snp.genotype(sample_name)
-            sample_data = all_sample_data[sample_name]
+            data = sample_data[sample_name]
             sample_call = sample.data
+            #OUR VCFS don't have genotypes! LOL!
             # sample_data[0].append(pack('<B', sample_call.GT if sample_call.GT is not None else 0))
             # if type(sample_call.AD) == list:
             #     sample_data[1].append(pack('<B', min(sample_call.AD[0], 255)))
@@ -38,22 +38,21 @@ def generate_and_store(chrom, start, end, samples):
             #     sample_data[1].append(pack('<B', min(sample_call.AD, 255)))
             #     sample_data[2].append(pack('<B', 0))
             if type(sample_call.AD) == list:
-                sample_data[0].append(pack('<B', min(sample_call.AD[0], 255)))
-                sample_data[1].append(pack('<B', min(sample_call.AD[1], 255)))
+                data[0].append(pack('<B', min(sample_call.AD[0], 255)))
+                data[1].append(pack('<B', min(sample_call.AD[1], 255)))
             else:
-                sample_data[0].append(pack('<B', min(sample_call.AD, 255)))
-                sample_data[1].append(pack('<B', 0))
+                data[0].append(pack('<B', min(sample_call.AD, 255)))
+                data[1].append(pack('<B', 0))
+    for sample in needed_samples:
+        sample_data[sample] = bytes(sum(sample_data[sample], bytearray()))
 
-
-    for sample in all_sample_data:
-        all_sample_data[sample] = bytes(sum(all_sample_data[sample], bytearray()))
-
+    #Cache on a seperate thread so we can return
     def cache_data():
-        for sample in all_sample_data:
-            cache[':'.join((config.vcf_file, chrom, sample, str(start), str(end), '_geno'))] = all_sample_data[sample]
+        for sample in needed_samples:
+            cache[':'.join((config.vcf_file, chrom, sample, str(start), str(end), '_geno'))] = sample_data[sample]
     thread.start_new_thread(cache_data, ())
 
-    return all_sample_data
+    return sample_data
 
 def response(query_data):
     return query_data
@@ -62,7 +61,10 @@ def handler(start_response, query_data):
     chrom = query_data['chrom']
     start = int(query_data['start'])
     end = int(query_data['end'])
-    samples = query_data['samples'].split('~')
+    try:
+        samples = query_data['samples'].split('~')
+    except KeyError:
+        samples = []
 
     if chrom not in tabix.contigs:
         raise NotFound(chrom+' Chromosome name not found')
@@ -70,20 +72,23 @@ def handler(start_response, query_data):
         if sample not in vcf_reader.samples:
             raise NotFound(sample+' sample not found')
 
-    sample_data = bytearray()
-    try:
-        for sample in samples:
-            data = cache[':'.join((config.vcf_file, chrom, sample, str(start), str(end), '_geno'))]
-            sample_data += data
-    except KeyError:
-        all_sample_data = generate_and_store(chrom, start, end, samples)
-        for sample in samples:
-            sample_data += all_sample_data[sample]
-    data = bytes(sample_data)
-
+    sample_data = {}
+    missing = False
+    for sample in samples:
+        try:
+            sample_data[sample] = cache[':'.join((config.vcf_file, chrom, sample, str(start), str(end), '_geno'))]
+        except KeyError:
+            sample_data[sample] = None
+            missing = True
+    if missing:
+        sample_data = generate_and_store(chrom, start, end, sample_data)
+    output = bytearray()
+    for sample in samples:
+        output += sample_data[sample]
+    output = bytes(output)
     status = '200 OK'
     response_headers = [('Content-type', 'text/plain'),
-                        ('Content-Length', str(len(data)))]
+                        ('Content-Length', str(len(output)))]
     start_response(status, response_headers)
-    yield data
+    yield output
 
