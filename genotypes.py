@@ -1,4 +1,3 @@
-import bsddb
 import vcf
 import pysam
 from struct import pack
@@ -6,9 +5,10 @@ from werkzeug.exceptions import NotFound
 import config
 from itertools import chain
 import thread
+from file_dict import FileDict
 
 #TODO cache doesn't have locking....
-cache = bsddb.hashopen('cache.db')
+cache = FileDict('cache')
 tabix = pysam.Tabixfile(config.vcf_file)
 vcf_reader = vcf.Reader(filename=config.vcf_file)
 
@@ -23,8 +23,6 @@ def generate_and_store(chrom, start, end, sample_data):
     for sample in needed_samples:
         sample_data[sample] = [bytearray(), bytearray(), bytearray()]
     for i, snp in enumerate(custom_vcf_reader.fetch(chrom, start, end-1)):
-        if (i % 100) == 0:
-            print 'custom',i
         for sample_name in needed_samples:
             sample = snp.genotype(sample_name)
             data = sample_data[sample_name]
