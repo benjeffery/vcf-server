@@ -32,18 +32,12 @@ def generate_and_store(chrom, start, end, sample_data):
             sample_call = sample.data
             #OUR VCFS don't have genotypes! LOL!
             # sample_data[0].append(pack('<B', sample_call.GT if sample_call.GT is not None else 0))
-            # if type(sample_call.AD) == list:
-            #     sample_data[1].append(pack('<B', min(sample_call.AD[0], 255)))
-            #     sample_data[2].append(pack('<B', min(sample_call.AD[1], 255)))
-            # else:
-            #     sample_data[1].append(pack('<B', min(sample_call.AD, 255)))
-            #     sample_data[2].append(pack('<B', 0))
             if type(sample_call.AD) == list:
-                data[0].append(pack('<B', min(sample_call.AD[0], 255)))
-                data[1].append(pack('<B', min(sample_call.AD[1], 255)))
+                data[0] += pack('<H', min(sample_call.AD[0], 255*255))
+                data[1] += pack('<H', min(sample_call.AD[1], 255*255))
             else:
-                data[0].append(pack('<B', min(sample_call.AD, 255)))
-                data[1].append(pack('<B', 0))
+                data[0] += pack('<H', min(sample_call.AD, 255*255))
+                data[1] += pack('<H', 0)
     for sample in needed_samples:
         sample_data[sample] = bytes(sum(sample_data[sample], bytearray()))
     snp_data = bytes(sum(snp_data, bytearray()))
@@ -71,9 +65,6 @@ def handler(start_response, query_data):
 
     if chrom not in tabix.contigs:
         raise NotFound(chrom+' Chromosome name not found')
-    for sample in samples:
-        if sample not in vcf_reader.samples:
-            raise NotFound(sample+' sample not found')
 
     sample_data = {}
     missing = False
